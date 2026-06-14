@@ -17,7 +17,29 @@ test/
 
 node_modules/
 dist/
+dist-ssr/
 npm-debug.log
 yarn-error.log
+*.local
+
+# Vite cache
+.vite/
+
+# Variables de entorno (API keys, etc.)
+.env
+.env.*
+!.env.example
+
+# Claude Code (configuración/memoria local del asistente)
+.claude/
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
 
 # End of https://www.toptal.com/developers/gitignore/api/vue,vuejs

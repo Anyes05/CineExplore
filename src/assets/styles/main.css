@@ -1,0 +1,3 @@
+/* Punto de entrada de estilos globales. Importar una sola vez en main.js. */
+@import './tokens.css';
+@import './base.css';
