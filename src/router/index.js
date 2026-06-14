@@ -9,6 +9,13 @@ const routes = [
     meta: { title: 'Inicio' },
   },
   {
+    path: '/pelicula/:id',
+    name: 'detalle-pelicula',
+    component: () => import('@/views/MovieDetailView.vue'),
+    props: true,
+    meta: { title: 'Detalle' },
+  },
+  {
     // Vistas que aún no existen se agregarán en próximas iteraciones.
     path: '/:pathMatch(.*)*',
     name: 'not-found',

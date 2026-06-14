@@ -1,18 +1,29 @@
 <script setup>
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
-import { usePeliculasStore } from '@/stores/peliculas'
+import { ORDENES, usePeliculasStore } from '@/stores/peliculas'
 import MovieGrid from '@/components/movie/MovieGrid.vue'
+import GenreFilter from '@/components/movie/GenreFilter.vue'
+import SortSelect from '@/components/movie/SortSelect.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
 
 const peliculasStore = usePeliculasStore()
-const { peliculas, mapaGeneros, cargando, error } = storeToRefs(peliculasStore)
+const { peliculas, generos, generoId, orden, consulta, mapaGeneros, cargando, cargandoMas, error, hayMas, buscando } =
+  storeToRefs(peliculasStore)
 
-function cargar() {
+// Título de la sección según el modo (búsqueda / género / catálogo).
+const titulo = computed(() => {
+  if (buscando.value) return `Resultados para «${consulta.value.trim()}»`
+  if (generoId.value) return mapaGeneros.value[generoId.value] || 'Catálogo'
+  return 'Populares ahora'
+})
+
+function cargarInicial() {
   peliculasStore.cargarGeneros()
-  peliculasStore.cargarPopulares()
+  peliculasStore.cargar()
 }
 
-onMounted(cargar)
+onMounted(cargarInicial)
 </script>
 
 <template>
@@ -29,22 +40,53 @@ onMounted(cargar)
     </section>
 
     <section class="catalog u-container">
+      <!-- Controles: en búsqueda mostramos resultado + limpiar; si no, filtros -->
+      <div class="catalog__controls">
+        <GenreFilter
+          v-if="!buscando"
+          :generos="generos"
+          :genero-activo="generoId"
+          @seleccionar="peliculasStore.establecerGenero"
+        />
+        <p v-else class="catalog__searching">
+          Buscando «{{ consulta.trim() }}»
+          <button class="catalog__clear" type="button" @click="peliculasStore.limpiarBusqueda()">
+            Limpiar
+          </button>
+        </p>
+
+        <SortSelect
+          v-if="!buscando"
+          :ordenes="ORDENES"
+          :model-value="orden"
+          @update:model-value="peliculasStore.establecerOrden"
+        />
+      </div>
+
       <header class="catalog__header">
-        <div>
-          <h2 class="catalog__title">Populares ahora</h2>
-          <p v-if="!cargando && !error" class="catalog__count">
-            {{ peliculas.length }} películas disponibles para explorar
-          </p>
-        </div>
+        <h2 class="catalog__title">{{ titulo }}</h2>
+        <p v-if="!cargando && !error" class="catalog__count">
+          {{ peliculas.length }} película{{ peliculas.length === 1 ? '' : 's' }}
+        </p>
       </header>
 
       <MovieGrid
         :peliculas="peliculas"
         :mapa-generos="mapaGeneros"
+        :genero-preferido="generoId"
         :cargando="cargando"
         :error="error"
-        @reintentar="cargar"
+        empty-title="Sin resultados"
+        empty-description="Probá con otro término de búsqueda o cambiá los filtros."
+        @reintentar="peliculasStore.cargar()"
       />
+
+      <!-- Paginación -->
+      <div v-if="hayMas && !error && peliculas.length" class="catalog__more">
+        <BaseButton variante="soft" tamano="lg" :disabled="cargandoMas" @click="peliculasStore.cargarMas()">
+          {{ cargandoMas ? 'Cargando…' : 'Ver más películas' }}
+        </BaseButton>
+      </div>
     </section>
   </div>
 </template>
@@ -85,10 +127,38 @@ onMounted(cargar)
   margin-top: var(--space-7);
 }
 
+.catalog__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.catalog__controls > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.catalog__searching {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.catalog__clear {
+  margin-left: var(--space-2);
+  color: var(--color-brand);
+  font-weight: 600;
+}
+
+.catalog__clear:hover {
+  text-decoration: underline;
+}
+
 .catalog__header {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
   margin-bottom: var(--space-5);
 }
 
@@ -101,9 +171,19 @@ onMounted(cargar)
   font-size: var(--text-sm);
 }
 
+.catalog__more {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-7);
+}
+
 @media (max-width: 640px) {
   .hero__title {
     font-size: var(--text-3xl);
+  }
+  .catalog__controls {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 </style>

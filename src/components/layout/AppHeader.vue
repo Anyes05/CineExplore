@@ -2,11 +2,78 @@
 /**
  * Encabezado principal de la aplicación.
  * Logo + buscador + acciones (favoritos, tema, sesión).
- * Por ahora el buscador y la sesión son visuales; se cablean más adelante.
+ * El buscador escribe en el store con debounce y navega a la Home.
  */
-import { RouterLink } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
+import { storeToRefs } from 'pinia'
+import { usePeliculasStore } from '@/stores/peliculas'
+import { useAuthStore } from '@/stores/auth'
+import { useUiStore } from '@/stores/ui'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
+
+const router = useRouter()
+const peliculasStore = usePeliculasStore()
+const { consulta } = storeToRefs(peliculasStore)
+
+const auth = useAuthStore()
+const ui = useUiStore()
+const { estaAutenticado, usuarioActual } = storeToRefs(auth)
+
+// Inicial para el avatar del usuario logueado.
+const inicial = computed(() => usuarioActual.value?.nombre?.[0]?.toUpperCase() ?? '?')
+
+// Menú desplegable del usuario.
+const menuAbierto = ref(false)
+const refUsuario = ref(null)
+
+function alClickFuera(evento) {
+  if (refUsuario.value && !refUsuario.value.contains(evento.target)) {
+    menuAbierto.value = false
+  }
+}
+
+function cerrarSesion() {
+  auth.cerrarSesion()
+  menuAbierto.value = false
+}
+
+onMounted(() => document.addEventListener('click', alClickFuera))
+
+// Texto local del input, inicializado con la búsqueda persistida en sesión.
+const textoBusqueda = ref(consulta.value)
+
+let temporizador = null
+
+function aplicarBusqueda() {
+  peliculasStore.establecerConsulta(textoBusqueda.value)
+  if (router.currentRoute.value.name !== 'home') {
+    router.push({ name: 'home' })
+  }
+}
+
+// Debounce: espera a que el usuario deje de escribir antes de pegarle a la API.
+watch(textoBusqueda, () => {
+  clearTimeout(temporizador)
+  temporizador = setTimeout(aplicarBusqueda, 450)
+})
+
+function enviar() {
+  clearTimeout(temporizador)
+  aplicarBusqueda()
+}
+
+function limpiar() {
+  textoBusqueda.value = ''
+  clearTimeout(temporizador)
+  aplicarBusqueda()
+}
+
+onBeforeUnmount(() => {
+  clearTimeout(temporizador)
+  document.removeEventListener('click', alClickFuera)
+})
 </script>
 
 <template>
@@ -23,18 +90,28 @@ import ThemeToggle from '@/components/ui/ThemeToggle.vue'
         <span class="brand__text">Cine<span class="brand__accent">Explore</span></span>
       </RouterLink>
 
-      <!-- Buscador (placeholder por ahora) -->
-      <form class="search" role="search" @submit.prevent>
+      <!-- Buscador -->
+      <form class="search" role="search" @submit.prevent="enviar">
         <svg class="search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="11" cy="11" r="7" />
           <path d="m20 20-3.2-3.2" stroke-linecap="round" />
         </svg>
         <input
+          v-model="textoBusqueda"
           class="search__input"
           type="search"
           placeholder="Buscar películas…"
           aria-label="Buscar películas"
         />
+        <button
+          v-if="textoBusqueda"
+          class="search__clear"
+          type="button"
+          aria-label="Limpiar búsqueda"
+          @click="limpiar"
+        >
+          ✕
+        </button>
       </form>
 
       <!-- Acciones -->
@@ -50,7 +127,40 @@ import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 
         <ThemeToggle />
 
-        <BaseButton variante="primary" tamano="sm">Iniciar sesión</BaseButton>
+        <!-- Sin sesión: botón de acceso -->
+        <BaseButton
+          v-if="!estaAutenticado"
+          variante="primary"
+          tamano="sm"
+          @click="ui.abrirAuth('login')"
+        >
+          Iniciar sesión
+        </BaseButton>
+
+        <!-- Con sesión: chip de usuario con menú -->
+        <div v-else ref="refUsuario" class="user-menu">
+          <button
+            class="user-menu__trigger"
+            type="button"
+            :aria-expanded="menuAbierto"
+            aria-haspopup="menu"
+            @click="menuAbierto = !menuAbierto"
+          >
+            <span class="user-menu__avatar" aria-hidden="true">{{ inicial }}</span>
+            <span class="user-menu__name">{{ usuarioActual.nombre }}</span>
+          </button>
+
+          <transition name="dropdown">
+            <ul v-if="menuAbierto" class="user-menu__list" role="menu">
+              <li class="user-menu__email">{{ usuarioActual.email }}</li>
+              <li role="none">
+                <button class="user-menu__item" type="button" role="menuitem" @click="cerrarSesion">
+                  Cerrar sesión
+                </button>
+              </li>
+            </ul>
+          </transition>
+        </div>
       </nav>
     </div>
   </header>
@@ -124,7 +234,7 @@ import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 
 .search__input {
   width: 100%;
-  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-7);
+  padding: var(--space-3) var(--space-7) var(--space-3) var(--space-7);
   border-radius: var(--radius-pill);
   border: 1px solid var(--color-border);
   background-color: var(--color-surface-inset);
@@ -142,6 +252,32 @@ import ThemeToggle from '@/components/ui/ThemeToggle.vue'
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 20%, transparent);
 }
 
+/* Oculta la X nativa del input type=search para usar la nuestra. */
+.search__input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.search__clear {
+  position: absolute;
+  right: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  background-color: var(--color-surface-2);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.search__clear:hover {
+  color: var(--color-text);
+  background-color: var(--color-border);
+}
+
 /* --- Acciones --- */
 .app-header__actions {
   display: flex;
@@ -153,6 +289,95 @@ import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 .icon {
   width: 16px;
   height: 16px;
+}
+
+/* --- Menú de usuario --- */
+.user-menu {
+  position: relative;
+}
+
+.user-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-1);
+  border-radius: var(--radius-pill);
+  background-color: var(--color-surface-2);
+  transition: background-color var(--transition-fast);
+}
+
+.user-menu__trigger:hover {
+  background-color: var(--color-border);
+}
+
+.user-menu__avatar {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-pill);
+  background: var(--gradient-hero);
+  color: #fff;
+  font-weight: 700;
+  font-size: var(--text-sm);
+}
+
+.user-menu__name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-menu__list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-2));
+  z-index: 30;
+  min-width: 200px;
+  padding: var(--space-2);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.user-menu__email {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-menu__item {
+  width: 100%;
+  text-align: left;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-danger);
+  transition: background-color var(--transition-fast);
+}
+
+.user-menu__item:hover {
+  background-color: var(--color-surface-2);
+}
+
+/* Animación del menú desplegable. */
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 /* --- Responsive --- */

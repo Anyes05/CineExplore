@@ -1,7 +1,13 @@
 <script setup>
 import { RouterView } from 'vue-router'
+import { storeToRefs } from 'pinia'
+import { useUiStore } from '@/stores/ui'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
+import AuthModal from '@/components/auth/AuthModal.vue'
+
+const ui = useUiStore()
+const { modalAuthAbierto } = storeToRefs(ui)
 </script>
 
 <template>
@@ -17,6 +23,8 @@ import AppFooter from '@/components/layout/AppFooter.vue'
     </main>
 
     <AppFooter />
+
+    <AuthModal v-if="modalAuthAbierto" />
   </div>
 </template>
 

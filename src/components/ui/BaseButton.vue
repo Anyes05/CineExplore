@@ -70,6 +70,12 @@ const clases = computed(() => [
   transform: translateY(1px);
 }
 
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* --- Tamaños --- */
 .btn--sm {
   padding: var(--space-2) var(--space-3);

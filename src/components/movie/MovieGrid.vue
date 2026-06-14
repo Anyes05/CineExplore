@@ -10,6 +10,8 @@ import StateMessage from '@/components/ui/StateMessage.vue'
 const props = defineProps({
   peliculas: { type: Array, default: () => [] },
   mapaGeneros: { type: Object, default: () => ({}) },
+  // Si hay un género activo, se prioriza mostrarlo en la card cuando la peli lo tenga.
+  generoPreferido: { type: [Number, null], default: null },
   cargando: { type: Boolean, default: false },
   error: { type: String, default: null },
   idsFavoritos: { type: Array, default: () => [] },
@@ -20,9 +22,13 @@ const props = defineProps({
 
 defineEmits(['alternar-favorito', 'reintentar'])
 
-// Nombre del primer género de la película, según el diccionario recibido.
+// Nombre del género a mostrar en la card. Prioriza el género filtrado
+// (si la película lo incluye); si no, usa el primero de su lista.
 function nombreGeneroDe(pelicula) {
-  const id = pelicula.genre_ids?.[0]
+  const ids = pelicula.genre_ids ?? []
+  const id = props.generoPreferido && ids.includes(props.generoPreferido)
+    ? props.generoPreferido
+    : ids[0]
   return id ? props.mapaGeneros[id] || '' : ''
 }
 </script>
