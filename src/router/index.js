@@ -16,6 +16,25 @@ const routes = [
     meta: { title: 'Detalle' },
   },
   {
+    path: '/favoritos',
+    name: 'favoritos',
+    component: () => import('@/views/FavoritesView.vue'),
+    meta: { title: 'Mis Favoritos' },
+  },
+  {
+    path: '/listas',
+    name: 'listas',
+    component: () => import('@/views/ListsView.vue'),
+    meta: { title: 'Mis Listas' },
+  },
+  {
+    path: '/listas/:id',
+    name: 'detalle-lista',
+    component: () => import('@/views/ListDetailView.vue'),
+    props: true,
+    meta: { title: 'Lista' },
+  },
+  {
     // Vistas que aún no existen se agregarán en próximas iteraciones.
     path: '/:pathMatch(.*)*',
     name: 'not-found',

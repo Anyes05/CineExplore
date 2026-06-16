@@ -1,7 +1,9 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { buscarPeliculas, descubrirPeliculas, obtenerGeneros } from '@/services/tmdb'
+import { guardarCacheHome, leerCacheHome } from '@/services/cache'
 import { useAlmacenamiento } from '@/composables/useAlmacenamiento'
+import { usePreferenciasStore } from '@/stores/preferencias'
 
 /** Opciones de orden disponibles (mapean a los `sort_by` de TMDB). */
 export const ORDENES = [
@@ -17,6 +19,8 @@ export const ORDENES = [
  * (búsqueda, género y orden), persistidos en sessionStorage.
  */
 export const usePeliculasStore = defineStore('peliculas', () => {
+  const preferencias = usePreferenciasStore()
+
   // --- Estado del catálogo ---
   const peliculas = ref([])
   const generos = ref([])
@@ -25,6 +29,8 @@ export const usePeliculasStore = defineStore('peliculas', () => {
   const cargando = ref(false) // carga inicial o cambio de filtros
   const cargandoMas = ref(false) // paginación ("ver más")
   const error = ref(null)
+  // True cuando lo visible viene del cache local (sin red).
+  const desdeCache = ref(false)
 
   // --- Filtros (persistidos en sessionStorage) ---
   const consulta = useAlmacenamiento('cineexplore:consulta', '', { almacen: 'sesion' })
@@ -49,7 +55,53 @@ export const usePeliculasStore = defineStore('peliculas', () => {
       generoId: generoId.value,
       orden: orden.value,
       pagina: paginaPedida,
+      modoSeguro: preferencias.modoSeguro,
     })
+  }
+
+  /**
+   * El endpoint /search/movie no acepta `without_keywords`, así que cuando el
+   * modo seguro está activo descartamos client-side los resultados marcados
+   * como `adult` y los que vengan con muy pocos votos (suelen ser entradas
+   * sin moderar).
+   */
+  function filtrarSiHaceFalta(resultados) {
+    if (!buscando.value || !preferencias.modoSeguro) return resultados
+    return resultados.filter((p) => !p.adult && (p.vote_count ?? 0) >= 5)
+  }
+
+  /** Snapshot del estado actual de la Home para guardarlo en cache. */
+  function snapshotHome() {
+    return {
+      peliculas: peliculas.value,
+      pagina: pagina.value,
+      totalPaginas: totalPaginas.value,
+      filtros: {
+        consulta: consulta.value,
+        generoId: generoId.value,
+        orden: orden.value,
+        modoSeguro: preferencias.modoSeguro,
+      },
+    }
+  }
+
+  /**
+   * Si estamos offline y existe un cache que coincide con los filtros
+   * actuales, lo restauramos. Devuelve true si pudo restaurar.
+   */
+  function intentarRestaurarDesdeCache() {
+    const cache = leerCacheHome()
+    if (!cache) return false
+    const mismosFiltros =
+      cache.filtros?.consulta === consulta.value &&
+      cache.filtros?.generoId === generoId.value &&
+      cache.filtros?.orden === orden.value
+    if (!mismosFiltros) return false
+    peliculas.value = cache.peliculas ?? []
+    pagina.value = cache.pagina ?? 1
+    totalPaginas.value = cache.totalPaginas ?? 1
+    desdeCache.value = true
+    return true
   }
 
   /**
@@ -63,17 +115,36 @@ export const usePeliculasStore = defineStore('peliculas', () => {
     try {
       const paginaPedida = anexar ? pagina.value + 1 : 1
       const datos = await traerPagina(paginaPedida)
-      const resultados = datos.results ?? []
+      const resultados = filtrarSiHaceFalta(datos.results ?? [])
       peliculas.value = anexar ? [...peliculas.value, ...resultados] : resultados
       pagina.value = datos.page ?? 1
       totalPaginas.value = datos.total_pages ?? 1
+      desdeCache.value = false
+      // Sólo cacheamos la "vista principal" (sin paginación adicional) para
+      // mantener la entrada chica y predecible.
+      if (!anexar) guardarCacheHome(snapshotHome())
     } catch (err) {
-      error.value = err.message
-      if (!anexar) peliculas.value = []
+      const sinConexion = err.message === 'SIN_CONEXION'
+      // En modo offline, intentamos servir desde cache antes de marcar error.
+      if (sinConexion && !anexar && intentarRestaurarDesdeCache()) {
+        error.value = null
+      } else {
+        error.value = sinConexion
+          ? 'Sin conexión. No hay datos guardados para mostrar.'
+          : err.message
+        if (!anexar) peliculas.value = []
+      }
     } finally {
       bandera.value = false
     }
   }
+
+  // Si el usuario activa/desactiva el modo seguro, refrescamos el catálogo
+  // para que el filtro tenga efecto inmediato.
+  watch(
+    () => preferencias.modoSeguro,
+    () => cargar()
+  )
 
   // --- Acciones públicas ---
 
@@ -127,6 +198,7 @@ export const usePeliculasStore = defineStore('peliculas', () => {
     cargando,
     cargandoMas,
     error,
+    desdeCache,
     // filtros
     consulta,
     generoId,

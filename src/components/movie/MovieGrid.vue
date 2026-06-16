@@ -20,7 +20,7 @@ const props = defineProps({
   descripcionVacio: { type: String, default: '' },
 })
 
-defineEmits(['alternar-favorito', 'reintentar'])
+defineEmits(['alternar-favorito', 'agregar-a-lista', 'reintentar'])
 
 // Nombre del género a mostrar en la card. Prioriza el género filtrado
 // (si la película lo incluye); si no, usa el primero de su lista.
@@ -37,9 +37,9 @@ function nombreGeneroDe(pelicula) {
   <!-- Carga inicial: skeletons -->
   <div v-if="cargando" class="movie-grid" aria-busy="true">
     <div v-for="n in cantidadSkeletons" :key="n" class="movie-grid__skeleton">
-      <div class="movie-grid__skeleton-poster"></div>
-      <div class="movie-grid__skeleton-line"></div>
-      <div class="movie-grid__skeleton-line movie-grid__skeleton-line--short"></div>
+      <div class="movie-grid__skeleton-poster u-skeleton"></div>
+      <div class="movie-grid__skeleton-line u-skeleton"></div>
+      <div class="movie-grid__skeleton-line movie-grid__skeleton-line--short u-skeleton"></div>
     </div>
   </div>
 
@@ -73,6 +73,7 @@ function nombreGeneroDe(pelicula) {
       :nombre-genero="nombreGeneroDe(pelicula)"
       :es-favorito="idsFavoritos.includes(pelicula.id)"
       @alternar-favorito="$emit('alternar-favorito', $event)"
+      @agregar-a-lista="$emit('agregar-a-lista', $event)"
     />
   </div>
 </template>
@@ -104,34 +105,6 @@ function nombreGeneroDe(pelicula) {
 
 .movie-grid__skeleton-line--short {
   width: 55%;
-}
-
-.movie-grid__skeleton-poster,
-.movie-grid__skeleton-line {
-  background: linear-gradient(
-    90deg,
-    var(--color-surface-2) 25%,
-    var(--color-border) 37%,
-    var(--color-surface-2) 63%
-  );
-  background-size: 400% 100%;
-  animation: shimmer 1.4s ease infinite;
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: 100% 0;
-  }
-  100% {
-    background-position: -100% 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .movie-grid__skeleton-poster,
-  .movie-grid__skeleton-line {
-    animation: none;
-  }
 }
 
 .movie-grid__retry {

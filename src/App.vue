@@ -4,14 +4,17 @@ import { storeToRefs } from 'pinia'
 import { useUiStore } from '@/stores/ui'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
+import OfflineBanner from '@/components/layout/OfflineBanner.vue'
 import AuthModal from '@/components/auth/AuthModal.vue'
+import AddToListModal from '@/components/list/AddToListModal.vue'
 
 const ui = useUiStore()
-const { modalAuthAbierto } = storeToRefs(ui)
+const { modalAuthAbierto, peliculaParaLista } = storeToRefs(ui)
 </script>
 
 <template>
   <div class="app-shell">
+    <OfflineBanner />
     <AppHeader />
 
     <main class="app-shell__main">
@@ -25,6 +28,11 @@ const { modalAuthAbierto } = storeToRefs(ui)
     <AppFooter />
 
     <AuthModal v-if="modalAuthAbierto" />
+    <AddToListModal
+      v-if="peliculaParaLista"
+      :pelicula="peliculaParaLista"
+      @cerrar="ui.cerrarModalLista()"
+    />
   </div>
 </template>
 

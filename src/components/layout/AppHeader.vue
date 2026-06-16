@@ -12,6 +12,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
+import SafeToggle from '@/components/ui/SafeToggle.vue'
 
 const router = useRouter()
 const peliculasStore = usePeliculasStore()
@@ -125,6 +126,17 @@ onBeforeUnmount(() => {
           Favoritos
         </BaseButton>
 
+        <BaseButton variante="ghost" tamano="sm" to="/listas">
+          <template #icon>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M3 6h13M3 12h13M3 18h9" stroke-linecap="round" />
+              <path d="M18 14v8M14 18h8" stroke-linecap="round" />
+            </svg>
+          </template>
+          Listas
+        </BaseButton>
+
+        <SafeToggle />
         <ThemeToggle />
 
         <!-- Sin sesión: botón de acceso -->

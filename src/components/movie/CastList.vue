@@ -1,16 +1,27 @@
 <script setup>
 /**
  * Reparto de una película en scroll horizontal. Presentacional.
+ * Muestra skeletons mientras `cargando` es true.
  */
 import { urlImagen } from '@/services/tmdb'
 
 defineProps({
   personas: { type: Array, default: () => [] },
+  cargando: { type: Boolean, default: false },
+  cantidadSkeletons: { type: Number, default: 8 },
 })
 </script>
 
 <template>
-  <ul class="cast-list">
+  <ul v-if="cargando" class="cast-list" aria-busy="true">
+    <li v-for="n in cantidadSkeletons" :key="n" class="cast-list__item">
+      <div class="cast-list__avatar u-skeleton"></div>
+      <div class="cast-list__skeleton-line u-skeleton"></div>
+      <div class="cast-list__skeleton-line cast-list__skeleton-line--short u-skeleton"></div>
+    </li>
+  </ul>
+
+  <ul v-else class="cast-list">
     <li v-for="persona in personas" :key="persona.id" class="cast-list__item">
       <div class="cast-list__avatar">
         <img
@@ -84,5 +95,16 @@ defineProps({
 .cast-list__character {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
+}
+
+.cast-list__skeleton-line {
+  height: 12px;
+  width: 80%;
+  margin-inline: auto;
+  margin-top: var(--space-2);
+}
+
+.cast-list__skeleton-line--short {
+  width: 55%;
 }
 </style>

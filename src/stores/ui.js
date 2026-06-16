@@ -19,5 +19,25 @@ export const useUiStore = defineStore('ui', () => {
     modalAuthAbierto.value = false
   }
 
-  return { modalAuthAbierto, pestanaAuth, abrirAuth, cerrarAuth }
+  // --- Modal "Agregar a lista..." ---
+  // Guarda la película sobre la que se está operando (o null = cerrado).
+  const peliculaParaLista = ref(null)
+
+  function abrirModalLista(pelicula) {
+    peliculaParaLista.value = pelicula
+  }
+
+  function cerrarModalLista() {
+    peliculaParaLista.value = null
+  }
+
+  return {
+    modalAuthAbierto,
+    pestanaAuth,
+    abrirAuth,
+    cerrarAuth,
+    peliculaParaLista,
+    abrirModalLista,
+    cerrarModalLista,
+  }
 })

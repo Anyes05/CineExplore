@@ -14,7 +14,7 @@ const props = defineProps({
   esFavorito: { type: Boolean, default: false },
 })
 
-defineEmits(['alternar-favorito'])
+defineEmits(['alternar-favorito', 'agregar-a-lista'])
 
 const poster = computed(() => urlImagen(props.pelicula.poster_path, 'w342'))
 const anio = computed(() => props.pelicula.release_date?.slice(0, 4) || '—')
@@ -39,18 +39,31 @@ const puntuacion = computed(() =>
 
       <span v-if="nombreGenero" class="movie-card__genre">{{ nombreGenero }}</span>
 
-      <button
-        class="movie-card__fav"
-        :class="{ 'movie-card__fav--active': esFavorito }"
-        type="button"
-        :aria-pressed="esFavorito"
-        :aria-label="esFavorito ? 'Quitar de favoritos' : 'Agregar a favoritos'"
-        @click.prevent="$emit('alternar-favorito', pelicula)"
-      >
-        <svg viewBox="0 0 24 24" :fill="esFavorito ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
-          <path d="M12 21s-7.5-4.6-9.5-9.2C1.1 8.2 3 5 6.2 5c2 0 3.2 1.2 3.8 2.3C10.6 6.2 11.8 5 13.8 5 17 5 18.9 8.2 17.5 11.8 15.5 16.4 12 21 12 21z" />
-        </svg>
-      </button>
+      <div class="movie-card__quick-actions">
+        <button
+          class="movie-card__action movie-card__action--list"
+          type="button"
+          aria-label="Agregar a una lista"
+          @click.prevent="$emit('agregar-a-lista', pelicula)"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M3 6h13M3 12h13M3 18h9" stroke-linecap="round" />
+            <path d="M18 14v8M14 18h8" stroke-linecap="round" />
+          </svg>
+        </button>
+        <button
+          class="movie-card__action movie-card__action--fav"
+          :class="{ 'movie-card__action--active': esFavorito }"
+          type="button"
+          :aria-pressed="esFavorito"
+          :aria-label="esFavorito ? 'Quitar de favoritos' : 'Agregar a favoritos'"
+          @click.prevent="$emit('alternar-favorito', pelicula)"
+        >
+          <svg viewBox="0 0 24 24" :fill="esFavorito ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+            <path d="M12 21s-7.5-4.6-9.5-9.2C1.1 8.2 3 5 6.2 5c2 0 3.2 1.2 3.8 2.3C10.6 6.2 11.8 5 13.8 5 17 5 18.9 8.2 17.5 11.8 15.5 16.4 12 21 12 21z" />
+          </svg>
+        </button>
+      </div>
     </RouterLink>
 
     <div class="movie-card__body">
@@ -123,10 +136,16 @@ const puntuacion = computed(() =>
   border-radius: var(--radius-pill);
 }
 
-.movie-card__fav {
+.movie-card__quick-actions {
   position: absolute;
   top: var(--space-3);
   right: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.movie-card__action {
   display: grid;
   place-items: center;
   width: 36px;
@@ -139,16 +158,21 @@ const puntuacion = computed(() =>
     transform var(--transition-fast);
 }
 
-.movie-card__fav svg {
+.movie-card__action svg {
   width: 18px;
   height: 18px;
 }
 
-.movie-card__fav:hover {
+.movie-card__action:hover {
   transform: scale(1.08);
 }
 
-.movie-card__fav--active {
+.movie-card__action--list:hover {
+  color: var(--color-brand);
+  background-color: rgba(255, 255, 255, 0.92);
+}
+
+.movie-card__action--active {
   color: var(--color-danger);
   background-color: rgba(255, 255, 255, 0.92);
 }

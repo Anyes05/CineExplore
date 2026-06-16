@@ -2,14 +2,44 @@
 import { computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { ORDENES, usePeliculasStore } from '@/stores/peliculas'
+import { useFavoritosStore } from '@/stores/favoritos'
+import { useUiStore } from '@/stores/ui'
+import { useGuardiaSesion } from '@/composables/useGuardiaSesion'
 import MovieGrid from '@/components/movie/MovieGrid.vue'
 import GenreFilter from '@/components/movie/GenreFilter.vue'
 import SortSelect from '@/components/movie/SortSelect.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 
 const peliculasStore = usePeliculasStore()
-const { peliculas, generos, generoId, orden, consulta, mapaGeneros, cargando, cargandoMas, error, hayMas, buscando } =
-  storeToRefs(peliculasStore)
+const {
+  peliculas,
+  generos,
+  generoId,
+  orden,
+  consulta,
+  mapaGeneros,
+  cargando,
+  cargandoMas,
+  error,
+  hayMas,
+  buscando,
+  desdeCache,
+} = storeToRefs(peliculasStore)
+
+const favoritos = useFavoritosStore()
+const ui = useUiStore()
+const { idsFavoritos } = storeToRefs(favoritos)
+const { requerirSesion } = useGuardiaSesion()
+
+function alternarFavorito(pelicula) {
+  if (!requerirSesion()) return
+  favoritos.alternar(pelicula)
+}
+
+function abrirModalLista(pelicula) {
+  if (!requerirSesion()) return
+  ui.abrirModalLista(pelicula)
+}
 
 // Título de la sección según el modo (búsqueda / género / catálogo).
 const titulo = computed(() => {
@@ -68,6 +98,9 @@ onMounted(cargarInicial)
         <p v-if="!cargando && !error" class="catalog__count">
           {{ peliculas.length }} película{{ peliculas.length === 1 ? '' : 's' }}
         </p>
+        <span v-if="desdeCache" class="catalog__cache-badge" title="Sin conexión: estás viendo los últimos datos guardados.">
+          Datos en caché
+        </span>
       </header>
 
       <MovieGrid
@@ -76,9 +109,12 @@ onMounted(cargarInicial)
         :genero-preferido="generoId"
         :cargando="cargando"
         :error="error"
-        empty-title="Sin resultados"
-        empty-description="Probá con otro término de búsqueda o cambiá los filtros."
+        :ids-favoritos="idsFavoritos"
+        titulo-vacio="Sin resultados"
+        descripcion-vacio="Probá con otro término de búsqueda o cambiá los filtros."
         @reintentar="peliculasStore.cargar()"
+        @alternar-favorito="alternarFavorito"
+        @agregar-a-lista="abrirModalLista"
       />
 
       <!-- Paginación -->
@@ -169,6 +205,15 @@ onMounted(cargarInicial)
 .catalog__count {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+}
+
+.catalog__cache-badge {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background-color: color-mix(in srgb, var(--color-gold) 18%, transparent);
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  font-weight: 600;
 }
 
 .catalog__more {
