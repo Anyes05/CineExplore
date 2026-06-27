@@ -4,6 +4,7 @@ import { buscarPeliculas, descubrirPeliculas, obtenerGeneros } from '@/services/
 import { guardarCacheHome, leerCacheHome } from '@/services/cache'
 import { useAlmacenamiento } from '@/composables/useAlmacenamiento'
 import { usePreferenciasStore } from '@/stores/preferencias'
+import { useHistorialBusquedaStore } from '@/stores/historialBusqueda'
 
 /** Opciones de orden disponibles (mapean a los `sort_by` de TMDB). */
 export const ORDENES = [

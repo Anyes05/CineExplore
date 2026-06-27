@@ -8,6 +8,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { usePeliculasStore } from '@/stores/peliculas'
+import { useHistorialBusquedaStore } from '@/stores/historialBusqueda'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -16,7 +17,9 @@ import SafeToggle from '@/components/ui/SafeToggle.vue'
 
 const router = useRouter()
 const peliculasStore = usePeliculasStore()
+const historialStore = useHistorialBusquedaStore()
 const { consulta } = storeToRefs(peliculasStore)
+const { historial } = storeToRefs(historialStore)
 
 const auth = useAuthStore()
 const ui = useUiStore()
@@ -29,9 +32,25 @@ const inicial = computed(() => usuarioActual.value?.nombre?.[0]?.toUpperCase() ?
 const menuAbierto = ref(false)
 const refUsuario = ref(null)
 
+// Texto local del input, inicializado con la búsqueda persistida en sesión.
+const textoBusqueda = ref(consulta.value)
+
+// Panel de historial de búsqueda.
+const historialVisible = ref(false)
+const refBusqueda = ref(null)
+
+const historialFiltrado = computed(() => {
+  const termino = textoBusqueda.value.trim().toLowerCase()
+  if (!termino) return historial.value
+  return historial.value.filter((item) => item.toLowerCase().includes(termino))
+})
+
 function alClickFuera(evento) {
   if (refUsuario.value && !refUsuario.value.contains(evento.target)) {
     menuAbierto.value = false
+  }
+  if (refBusqueda.value && !refBusqueda.value.contains(evento.target)) {
+    historialVisible.value = false
   }
 }
 
@@ -41,9 +60,6 @@ function cerrarSesion() {
 }
 
 onMounted(() => document.addEventListener('click', alClickFuera))
-
-// Texto local del input, inicializado con la búsqueda persistida en sesión.
-const textoBusqueda = ref(consulta.value)
 
 let temporizador = null
 
@@ -62,13 +78,42 @@ watch(textoBusqueda, () => {
 
 function enviar() {
   clearTimeout(temporizador)
+  const termino = textoBusqueda.value.trim()
   aplicarBusqueda()
+  if (termino) {
+    historialStore.registrar(termino)
+  }
 }
 
 function limpiar() {
   textoBusqueda.value = ''
   clearTimeout(temporizador)
   aplicarBusqueda()
+}
+
+function mostrarHistorial() {
+  if (historial.value.length) historialVisible.value = true
+}
+
+function ocultarHistorial() {
+  historialVisible.value = false
+}
+
+function seleccionarHistorial(termino) {
+  textoBusqueda.value = termino
+  clearTimeout(temporizador)
+  aplicarBusqueda()
+  historialVisible.value = false
+}
+
+function quitarDelHistorial(termino) {
+  historialStore.eliminar(termino)
+  if (!historial.value.length) historialVisible.value = false
+}
+
+function limpiarHistorial() {
+  historialStore.limpiar()
+  historialVisible.value = false
 }
 
 onBeforeUnmount(() => {
@@ -92,28 +137,78 @@ onBeforeUnmount(() => {
       </RouterLink>
 
       <!-- Buscador -->
-      <form class="search" role="search" @submit.prevent="enviar">
-        <svg class="search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <circle cx="11" cy="11" r="7" />
-          <path d="m20 20-3.2-3.2" stroke-linecap="round" />
-        </svg>
-        <input
-          v-model="textoBusqueda"
-          class="search__input"
-          type="search"
-          placeholder="Buscar películas…"
-          aria-label="Buscar películas"
-        />
-        <button
-          v-if="textoBusqueda"
-          class="search__clear"
-          type="button"
-          aria-label="Limpiar búsqueda"
-          @click="limpiar"
-        >
-          ✕
-        </button>
-      </form>
+      <div ref="refBusqueda" class="search">
+        <form class="search__form" role="search" @submit.prevent="enviar">
+          <svg class="search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.2-3.2" stroke-linecap="round" />
+          </svg>
+          <input
+            v-model="textoBusqueda"
+            class="search__input"
+            type="search"
+            placeholder="Buscar películas…"
+            aria-label="Buscar películas"
+            autocomplete="off"
+            :aria-expanded="historialVisible && historialFiltrado.length > 0"
+            aria-controls="search-history"
+            @focus="mostrarHistorial"
+            @keydown.esc="ocultarHistorial"
+          />
+          <button
+            v-if="textoBusqueda"
+            class="search__clear"
+            type="button"
+            aria-label="Limpiar búsqueda"
+            @click="limpiar"
+          >
+            ✕
+          </button>
+        </form>
+
+        <transition name="dropdown">
+          <div
+            v-if="historialVisible && historialFiltrado.length"
+            id="search-history"
+            class="search__history"
+            role="listbox"
+            aria-label="Búsquedas recientes"
+          >
+            <p class="search__history-title">Búsquedas recientes</p>
+            <ul class="search__history-list">
+              <li v-for="item in historialFiltrado" :key="item" role="presentation">
+                <button
+                  class="search__history-item"
+                  type="button"
+                  role="option"
+                  @mousedown.prevent="seleccionarHistorial(item)"
+                >
+                  <svg class="search__history-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="8" />
+                    <path d="M12 8v4l3 2" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  <span class="search__history-text">{{ item }}</span>
+                </button>
+                <button
+                  class="search__history-remove"
+                  type="button"
+                  :aria-label="`Quitar «${item}» del historial`"
+                  @mousedown.prevent="quitarDelHistorial(item)"
+                >
+                  ✕
+                </button>
+              </li>
+            </ul>
+            <button
+              class="search__history-clear"
+              type="button"
+              @mousedown.prevent="limpiarHistorial"
+            >
+              Limpiar historial
+            </button>
+          </div>
+        </transition>
+      </div>
 
       <!-- Acciones -->
       <nav class="app-header__actions" aria-label="Acciones de usuario">
@@ -233,6 +328,10 @@ onBeforeUnmount(() => {
   margin-inline: auto;
 }
 
+.search__form {
+  position: relative;
+}
+
 .search__icon {
   position: absolute;
   left: var(--space-4);
@@ -288,6 +387,104 @@ onBeforeUnmount(() => {
 .search__clear:hover {
   color: var(--color-text);
   background-color: var(--color-border);
+}
+
+.search__history {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + var(--space-2));
+  z-index: 40;
+  padding: var(--space-2);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.search__history-title {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+
+.search__history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.search__history-list > li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.search__history-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  text-align: left;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  transition: background-color var(--transition-fast);
+}
+
+.search__history-item:hover {
+  background-color: var(--color-surface-2);
+}
+
+.search__history-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-faint);
+}
+
+.search__history-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search__history-remove {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.search__history-remove:hover {
+  color: var(--color-text);
+  background-color: var(--color-surface-2);
+}
+
+.search__history-clear {
+  width: 100%;
+  margin-top: var(--space-1);
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-align: center;
+  transition: color var(--transition-fast);
+}
+
+.search__history-clear:hover {
+  color: var(--color-danger);
 }
 
 /* --- Acciones --- */
