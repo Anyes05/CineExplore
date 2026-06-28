@@ -41,6 +41,9 @@ const { modalAuthAbierto, peliculaParaLista } = storeToRefs(ui)
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 .app-shell__main {

@@ -212,23 +212,23 @@ onBeforeUnmount(() => {
 
       <!-- Acciones -->
       <nav class="app-header__actions" aria-label="Acciones de usuario">
-        <BaseButton variante="ghost" tamano="sm" to="/favoritos">
+        <BaseButton variante="ghost" tamano="sm" to="/favoritos" aria-label="Favoritos">
           <template #icon>
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M12 21s-7.5-4.6-9.5-9.2C1.1 8.2 3 5 6.2 5c2 0 3.2 1.2 3.8 2.3C10.6 6.2 11.8 5 13.8 5 17 5 18.9 8.2 17.5 11.8 15.5 16.4 12 21 12 21z" />
             </svg>
           </template>
-          Favoritos
+          <span class="app-header__action-label">Favoritos</span>
         </BaseButton>
 
-        <BaseButton variante="ghost" tamano="sm" to="/listas">
+        <BaseButton variante="ghost" tamano="sm" to="/listas" aria-label="Mis listas">
           <template #icon>
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M3 6h13M3 12h13M3 18h9" stroke-linecap="round" />
               <path d="M18 14v8M14 18h8" stroke-linecap="round" />
             </svg>
           </template>
-          Listas
+          <span class="app-header__action-label">Listas</span>
         </BaseButton>
 
         <SafeToggle />
@@ -239,9 +239,11 @@ onBeforeUnmount(() => {
           v-if="!estaAutenticado"
           variante="primary"
           tamano="sm"
+          aria-label="Iniciar sesión"
           @click="ui.abrirAuth('login')"
         >
-          Iniciar sesión
+          <span class="app-header__login-label app-header__login-label--full">Iniciar sesión</span>
+          <span class="app-header__login-label app-header__login-label--short">Entrar</span>
         </BaseButton>
 
         <!-- Con sesión: chip de usuario con menú -->
@@ -278,6 +280,9 @@ onBeforeUnmount(() => {
   position: sticky;
   top: 0;
   z-index: var(--z-header);
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
   background-color: color-mix(in srgb, var(--color-surface) 88%, transparent);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--color-border);
@@ -288,6 +293,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: var(--space-5);
   min-height: var(--header-height);
+  min-width: 0;
 }
 
 /* --- Marca --- */
@@ -324,6 +330,7 @@ onBeforeUnmount(() => {
 .search {
   position: relative;
   flex: 1;
+  min-width: 0;
   max-width: 520px;
   margin-inline: auto;
 }
@@ -495,6 +502,10 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
+.app-header__login-label--short {
+  display: none;
+}
+
 .icon {
   width: 16px;
   height: 16px;
@@ -591,20 +602,82 @@ onBeforeUnmount(() => {
 
 /* --- Responsive --- */
 @media (max-width: 860px) {
-  .search {
-    order: 3;
-    flex-basis: 100%;
-    max-width: none;
-  }
   .app-header__inner {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'brand actions'
+      'search search';
+    gap: var(--space-3);
+    align-items: center;
     padding-block: var(--space-3);
+  }
+
+  .brand {
+    grid-area: brand;
+  }
+
+  .search {
+    grid-area: search;
+    width: 100%;
+    max-width: none;
+    margin-inline: 0;
+  }
+
+  .app-header__actions {
+    grid-area: actions;
+    justify-self: end;
+    gap: var(--space-1);
+  }
+}
+
+@media (max-width: 720px) {
+  .app-header__action-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .app-header__actions :deep(.btn--ghost.btn--sm) {
+    padding: var(--space-2);
+  }
+
+  .app-header__actions :deep(.safe-toggle),
+  .app-header__actions :deep(.theme-toggle) {
+    width: 36px;
+    height: 36px;
+  }
+
+  .user-menu__name {
+    display: none;
+  }
+
+  .user-menu__trigger {
+    padding: var(--space-1);
   }
 }
 
 @media (max-width: 560px) {
   .brand__text {
     display: none;
+  }
+
+  .app-header__login-label--full {
+    display: none;
+  }
+
+  .app-header__login-label--short {
+    display: inline;
+  }
+
+  .app-header__actions :deep(.btn--primary.btn--sm) {
+    padding: var(--space-2) var(--space-3);
   }
 }
 </style>
