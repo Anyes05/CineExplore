@@ -9,32 +9,14 @@
    por eso quedan en inglés.
    ========================================================================= */
 
+import { PARAMETROS_DISCOVER_SEGURO } from '@/data/filtroContenido'
+
 const BASE_API = 'https://api.themoviedb.org/3'
 const BASE_IMAGENES = 'https://image.tmdb.org/t/p'
 const IDIOMA = 'es-ES'
 const REGION = 'ES'
 
 const TOKEN = import.meta.env.VITE_TMDB_TOKEN
-
-/**
- * IDs de keywords de TMDB asociadas a contenido explícito o softcore.
- * Se usan con `without_keywords` (pipe = OR) en /discover cuando el usuario
- * tiene activado el modo seguro. El parámetro `include_adult=false` ya filtra
- * el catálogo X, pero TMDB no marca como "adult" muchos títulos eróticos /
- * softcore que igualmente conviene esconder.
- *
- * La lista es conservadora y editable. Si aparece un falso positivo,
- * se quita el ID correspondiente.
- */
-const KEYWORDS_EXPLICITAS = [
-  9685,   // softcore
-  190370, // erotica
-  2920,   // erotic movie
-  165159, // female full frontal nudity
-  165160, // male full frontal nudity
-  12565,  // nudity
-  6075,   // pornography
-].join('|')
 
 /**
  * Petición genérica a TMDB. Agrega autenticación e idioma,
@@ -56,12 +38,6 @@ async function peticion(ruta, parametros = {}) {
     }
   }
 
-  // Cortocircuito: si el navegador sabe que no hay red, evitamos el fetch
-  // y devolvemos un error reconocible para que la app caiga al cache.
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    throw new Error('SIN_CONEXION')
-  }
-
   let respuesta
   try {
     respuesta = await fetch(url, {
@@ -71,7 +47,7 @@ async function peticion(ruta, parametros = {}) {
       },
     })
   } catch {
-    throw new Error('SIN_CONEXION')
+    throw new Error('No se pudo conectar con TMDB. Revisá tu conexión.')
   }
 
   if (!respuesta.ok) {
@@ -96,25 +72,24 @@ export function buscarPeliculas(consulta, pagina = 1) {
   return peticion('/search/movie', { query: consulta, page: pagina, include_adult: false })
 }
 
-/** Descubrir películas filtrando por género y orden. */
+/**
+ * Descubrir películas filtrando por género y orden.
+ * Con modo seguro activo se limita la clasificación por edad y se excluyen keywords explícitas.
+ */
 export function descubrirPeliculas({
   generoId,
   orden = 'popularity.desc',
   pagina = 1,
   modoSeguro = true,
 } = {}) {
-  // En modo seguro: excluimos keywords explícitas y exigimos un mínimo de votos
-  // más alto, para evitar títulos oscuros sin moderación.
-  const filtroSeguro = modoSeguro
-    ? { without_keywords: KEYWORDS_EXPLICITAS, 'vote_count.gte': 100 }
-    : { 'vote_count.gte': 50 }
-
   return peticion('/discover/movie', {
     with_genres: generoId,
     sort_by: orden,
     page: pagina,
+    region: REGION,
     include_adult: false,
-    ...filtroSeguro,
+    'vote_count.gte': 50,
+    ...(modoSeguro ? PARAMETROS_DISCOVER_SEGURO : {}),
   })
 }
 
@@ -123,9 +98,9 @@ export function obtenerGeneros() {
   return peticion('/genre/movie/list')
 }
 
-/** Detalle completo de una película (con créditos y videos). */
+/** Detalle completo de una película (créditos, videos y clasificación por edad). */
 export function obtenerDetallePelicula(id) {
-  return peticion(`/movie/${id}`, { append_to_response: 'credits,videos' })
+  return peticion(`/movie/${id}`, { append_to_response: 'credits,videos,release_dates' })
 }
 
 /* --------------------------- Utilidades --------------------------------- */

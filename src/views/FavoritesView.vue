@@ -10,6 +10,8 @@ import { useFavoritosStore } from '@/stores/favoritos'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { usePeliculasStore } from '@/stores/peliculas'
+import { useAccionesPelicula } from '@/composables/useAccionesPelicula'
+import { useFiltroContenido } from '@/composables/useFiltroContenido'
 import MovieGrid from '@/components/movie/MovieGrid.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import StateMessage from '@/components/ui/StateMessage.vue'
@@ -18,6 +20,8 @@ const favoritos = useFavoritosStore()
 const auth = useAuthStore()
 const ui = useUiStore()
 const peliculasStore = usePeliculasStore()
+const { filtrar } = useFiltroContenido()
+const { alternarFavorito, agregarALista } = useAccionesPelicula()
 
 const { peliculas, idsFavoritos, cantidad, promedioRating } = storeToRefs(favoritos)
 const { mapaGeneros } = storeToRefs(peliculasStore)
@@ -32,6 +36,8 @@ if (!Object.keys(mapaGeneros.value).length) {
 const promedioFormateado = computed(() =>
   promedioRating.value ? promedioRating.value.toFixed(1) : '—'
 )
+
+const peliculasVisibles = computed(() => filtrar(peliculas.value))
 </script>
 
 <template>
@@ -85,14 +91,24 @@ const promedioFormateado = computed(() =>
       <BaseButton variante="primary" to="/">Explorar catálogo</BaseButton>
     </StateMessage>
 
+    <!-- Favoritos ocultos por modo seguro -->
+    <StateMessage
+      v-else-if="!peliculasVisibles.length"
+      icon="🛡️"
+      titulo="No hay favoritos visibles"
+      descripcion="Tus favoritos guardados no están disponibles con el modo seguro activado."
+    >
+      <BaseButton variante="primary" to="/">Explorar catálogo</BaseButton>
+    </StateMessage>
+
     <!-- Grilla -->
     <MovieGrid
       v-else
-      :peliculas="peliculas"
+      :peliculas="peliculasVisibles"
       :mapa-generos="mapaGeneros"
       :ids-favoritos="idsFavoritos"
-      @alternar-favorito="favoritos.alternar"
-      @agregar-a-lista="ui.abrirModalLista"
+      @alternar-favorito="alternarFavorito"
+      @agregar-a-lista="agregarALista"
     />
   </section>
 </template>

@@ -1,10 +1,15 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
-import { buscarPeliculas, descubrirPeliculas, obtenerGeneros } from '@/services/tmdb'
-import { guardarCacheHome, leerCacheHome } from '@/services/cache'
+import { obtenerPaginaCatalogo, obtenerGenerosConCache } from '@/services/catalogo'
+import {
+  filtrosCoinciden,
+  guardarCacheHome,
+  leerCacheHome,
+  limpiarCachePaginasCatalogo,
+} from '@/services/cache'
 import { useAlmacenamiento } from '@/composables/useAlmacenamiento'
 import { usePreferenciasStore } from '@/stores/preferencias'
-import { useHistorialBusquedaStore } from '@/stores/historialBusqueda'
+import { filtrarListado } from '@/data/filtroContenido'
 
 /** Opciones de orden disponibles (mapean a los `sort_by` de TMDB). */
 export const ORDENES = [
@@ -28,10 +33,9 @@ export const usePeliculasStore = defineStore('peliculas', () => {
   const pagina = ref(1)
   const totalPaginas = ref(1)
   const cargando = ref(false) // carga inicial o cambio de filtros
-  const cargandoMas = ref(false) // paginación ("ver más")
+  const cargandoMas = ref(false) // paginación (infinite scroll)
   const error = ref(null)
-  // True cuando lo visible viene del cache local (sin red).
-  const desdeCache = ref(false)
+  const desdeCache = ref(false) // true si el listado visible viene del cache offline
 
   // --- Filtros (persistidos en sessionStorage) ---
   const consulta = useAlmacenamiento('cineexplore:consulta', '', { almacen: 'sesion' })
@@ -47,62 +51,41 @@ export const usePeliculasStore = defineStore('peliculas', () => {
 
   // --- Acciones internas ---
 
-  /** Elige el endpoint según haya o no una búsqueda de texto activa. */
-  function traerPagina(paginaPedida) {
-    if (buscando.value) {
-      return buscarPeliculas(consulta.value.trim(), paginaPedida)
-    }
-    return descubrirPeliculas({
+  function filtrosActuales() {
+    return {
+      consulta: consulta.value,
       generoId: generoId.value,
       orden: orden.value,
-      pagina: paginaPedida,
       modoSeguro: preferencias.modoSeguro,
-    })
-  }
-
-  /**
-   * El endpoint /search/movie no acepta `without_keywords`, así que cuando el
-   * modo seguro está activo descartamos client-side los resultados marcados
-   * como `adult` y los que vengan con muy pocos votos (suelen ser entradas
-   * sin moderar).
-   */
-  function filtrarSiHaceFalta(resultados) {
-    if (!buscando.value || !preferencias.modoSeguro) return resultados
-    return resultados.filter((p) => !p.adult && (p.vote_count ?? 0) >= 5)
-  }
-
-  /** Snapshot del estado actual de la Home para guardarlo en cache. */
-  function snapshotHome() {
-    return {
-      peliculas: peliculas.value,
-      pagina: pagina.value,
-      totalPaginas: totalPaginas.value,
-      filtros: {
-        consulta: consulta.value,
-        generoId: generoId.value,
-        orden: orden.value,
-        modoSeguro: preferencias.modoSeguro,
-      },
     }
   }
 
-  /**
-   * Si estamos offline y existe un cache que coincide con los filtros
-   * actuales, lo restauramos. Devuelve true si pudo restaurar.
-   */
-  function intentarRestaurarDesdeCache() {
+  /** Restaura el último listado guardado si los filtros coinciden. */
+  function restaurarDesdeCacheHome() {
     const cache = leerCacheHome()
-    if (!cache) return false
-    const mismosFiltros =
-      cache.filtros?.consulta === consulta.value &&
-      cache.filtros?.generoId === generoId.value &&
-      cache.filtros?.orden === orden.value
-    if (!mismosFiltros) return false
+    const filtros = filtrosActuales()
+    if (!filtrosCoinciden(cache, filtros)) return false
+
     peliculas.value = cache.peliculas ?? []
     pagina.value = cache.pagina ?? 1
     totalPaginas.value = cache.totalPaginas ?? 1
-    desdeCache.value = true
-    return true
+    return peliculas.value.length > 0
+  }
+
+  /** Persiste el estado visible de Home para uso offline. */
+  function persistirCacheHome() {
+    guardarCacheHome({
+      ...filtrosActuales(),
+      peliculas: peliculas.value,
+      pagina: pagina.value,
+      totalPaginas: totalPaginas.value,
+    })
+    desdeCache.value = false
+  }
+
+  /** Descarta títulos no aptos que se cuelen en la respuesta de TMDB. */
+  function aplicarFiltroSeguro(resultados) {
+    return filtrarListado(resultados, preferencias.modoSeguro)
   }
 
   /**
@@ -113,43 +96,43 @@ export const usePeliculasStore = defineStore('peliculas', () => {
     const bandera = anexar ? cargandoMas : cargando
     bandera.value = true
     error.value = null
+
+    if (!anexar) {
+      desdeCache.value = false
+      restaurarDesdeCacheHome()
+    }
+
     try {
       const paginaPedida = anexar ? pagina.value + 1 : 1
-      const datos = await traerPagina(paginaPedida)
-      const resultados = filtrarSiHaceFalta(datos.results ?? [])
+      const filtros = filtrosActuales()
+      const datos = await obtenerPaginaCatalogo({
+        ...filtros,
+        consulta: consulta.value.trim(),
+        pagina: paginaPedida,
+        buscando: buscando.value,
+      })
+      const resultados = aplicarFiltroSeguro(datos.results ?? [])
       peliculas.value = anexar ? [...peliculas.value, ...resultados] : resultados
-      pagina.value = datos.page ?? 1
+      pagina.value = datos.page ?? paginaPedida
       totalPaginas.value = datos.total_pages ?? 1
-      desdeCache.value = false
-      // Sólo cacheamos la "vista principal" (sin paginación adicional) para
-      // mantener la entrada chica y predecible.
-      if (!anexar) guardarCacheHome(snapshotHome())
+      persistirCacheHome()
     } catch (err) {
-      const sinConexion = err.message === 'SIN_CONEXION'
-      // En modo offline, intentamos servir desde cache antes de marcar error.
-      if (sinConexion && !anexar && intentarRestaurarDesdeCache()) {
-        error.value = null
-      } else {
-        error.value = sinConexion
-          ? 'Sin conexión. No hay datos guardados para mostrar.'
-          : err.message
-        if (!anexar) peliculas.value = []
+      error.value = err.message
+      if (!anexar && peliculas.value.length) {
+        desdeCache.value = true
+      } else if (!anexar && restaurarDesdeCacheHome()) {
+        desdeCache.value = true
+      } else if (!anexar) {
+        peliculas.value = []
       }
     } finally {
       bandera.value = false
     }
   }
 
-  // Si el usuario activa/desactiva el modo seguro, refrescamos el catálogo
-  // para que el filtro tenga efecto inmediato.
-  watch(
-    () => preferencias.modoSeguro,
-    () => cargar()
-  )
-
   // --- Acciones públicas ---
 
-  /** Trae la siguiente página y la agrega al listado. */
+  /** Trae la siguiente página y la agrega al listado (infinite scroll). */
   function cargarMas() {
     if (hayMas.value && !cargando.value && !cargandoMas.value) {
       cargar({ anexar: true })
@@ -158,33 +141,45 @@ export const usePeliculasStore = defineStore('peliculas', () => {
 
   /** Aplica una búsqueda de texto (vacío = vuelve a navegación por filtros). */
   function establecerConsulta(texto) {
+    limpiarCachePaginasCatalogo()
     consulta.value = texto
     cargar()
   }
 
   function limpiarBusqueda() {
+    limpiarCachePaginasCatalogo()
     consulta.value = ''
     cargar()
   }
 
   /** Cambia el género activo (null = Todos). */
   function establecerGenero(id) {
+    limpiarCachePaginasCatalogo()
     generoId.value = id
     cargar()
   }
 
   /** Cambia el criterio de orden. */
   function establecerOrden(valor) {
+    limpiarCachePaginasCatalogo()
     orden.value = valor
     cargar()
   }
+
+  // Recarga el catálogo cuando cambia el modo seguro (preferencia en localStorage).
+  watch(
+    () => preferencias.modoSeguro,
+    () => {
+      limpiarCachePaginasCatalogo()
+      cargar()
+    }
+  )
 
   /** Carga la lista oficial de géneros una sola vez. */
   async function cargarGeneros() {
     if (generos.value.length) return
     try {
-      const datos = await obtenerGeneros()
-      generos.value = datos.genres ?? []
+      generos.value = await obtenerGenerosConCache()
     } catch (err) {
       console.warn('No se pudieron cargar los géneros:', err.message)
     }

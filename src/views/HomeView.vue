@@ -1,16 +1,18 @@
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { ORDENES, usePeliculasStore } from '@/stores/peliculas'
 import { useFavoritosStore } from '@/stores/favoritos'
-import { useUiStore } from '@/stores/ui'
-import { useGuardiaSesion } from '@/composables/useGuardiaSesion'
+import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
+import { useAccionesPelicula } from '@/composables/useAccionesPelicula'
 import MovieGrid from '@/components/movie/MovieGrid.vue'
 import GenreFilter from '@/components/movie/GenreFilter.vue'
 import SortSelect from '@/components/movie/SortSelect.vue'
-import BaseButton from '@/components/ui/BaseButton.vue'
 
 const peliculasStore = usePeliculasStore()
+const favoritosStore = useFavoritosStore()
+const { alternarFavorito, agregarALista } = useAccionesPelicula()
+
 const {
   peliculas,
   generos,
@@ -26,20 +28,18 @@ const {
   desdeCache,
 } = storeToRefs(peliculasStore)
 
-const favoritos = useFavoritosStore()
-const ui = useUiStore()
-const { idsFavoritos } = storeToRefs(favoritos)
-const { requerirSesion } = useGuardiaSesion()
+const { idsFavoritos } = storeToRefs(favoritosStore)
 
-function alternarFavorito(pelicula) {
-  if (!requerirSesion()) return
-  favoritos.alternar(pelicula)
-}
+const sentinel = ref(null)
 
-function abrirModalLista(pelicula) {
-  if (!requerirSesion()) return
-  ui.abrirModalLista(pelicula)
-}
+const puedeCargarMas = computed(
+  () => hayMas.value && !cargando.value && !cargandoMas.value && !error.value && peliculas.value.length > 0
+)
+
+useInfiniteScroll(() => peliculasStore.cargarMas(), {
+  sentinel,
+  puedeCargar: puedeCargarMas,
+})
 
 // Título de la sección según el modo (búsqueda / género / catálogo).
 const titulo = computed(() => {
@@ -95,33 +95,36 @@ onMounted(cargarInicial)
 
       <header class="catalog__header">
         <h2 class="catalog__title">{{ titulo }}</h2>
-        <p v-if="!cargando && !error" class="catalog__count">
+        <p v-if="desdeCache && !cargando" class="catalog__cache-hint">Datos guardados sin conexión</p>
+        <p v-else-if="!cargando && !error" class="catalog__count">
           {{ peliculas.length }} película{{ peliculas.length === 1 ? '' : 's' }}
         </p>
-        <span v-if="desdeCache" class="catalog__cache-badge" title="Sin conexión: estás viendo los últimos datos guardados.">
-          Datos en caché
-        </span>
       </header>
 
       <MovieGrid
         :peliculas="peliculas"
         :mapa-generos="mapaGeneros"
         :genero-preferido="generoId"
+        :ids-favoritos="idsFavoritos"
         :cargando="cargando"
         :error="error"
-        :ids-favoritos="idsFavoritos"
-        titulo-vacio="Sin resultados"
-        descripcion-vacio="Probá con otro término de búsqueda o cambiá los filtros."
-        @reintentar="peliculasStore.cargar()"
+        empty-title="Sin resultados"
+        empty-description="Probá con otro término de búsqueda o cambiá los filtros."
         @alternar-favorito="alternarFavorito"
-        @agregar-a-lista="abrirModalLista"
+        @agregar-a-lista="agregarALista"
+        @reintentar="peliculasStore.cargar()"
       />
 
-      <!-- Paginación -->
-      <div v-if="hayMas && !error && peliculas.length" class="catalog__more">
-        <BaseButton variante="soft" tamano="lg" :disabled="cargandoMas" @click="peliculasStore.cargarMas()">
-          {{ cargandoMas ? 'Cargando…' : 'Ver más películas' }}
-        </BaseButton>
+      <!-- Infinite scroll: centinela + indicador de carga -->
+      <div
+        v-if="hayMas || cargandoMas"
+        ref="sentinel"
+        class="catalog__sentinel"
+        aria-hidden="true"
+      />
+      <div v-if="cargandoMas" class="catalog__loading-more" aria-live="polite">
+        <div class="catalog__spinner" aria-hidden="true"></div>
+        <span>Cargando más películas…</span>
       </div>
     </section>
   </div>
@@ -202,24 +205,54 @@ onMounted(cargarInicial)
   font-size: var(--text-2xl);
 }
 
-.catalog__count {
+.catalog__count,
+.catalog__cache-hint {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
 }
 
-.catalog__cache-badge {
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-pill);
-  background-color: color-mix(in srgb, var(--color-gold) 18%, transparent);
-  color: var(--color-text);
-  font-size: var(--text-xs);
-  font-weight: 600;
+.catalog__cache-hint {
+  color: var(--color-warning, var(--color-text-muted));
+  font-style: italic;
 }
 
-.catalog__more {
+.catalog__sentinel {
+  height: 1px;
+  margin-top: var(--space-4);
+}
+
+.catalog__loading-more {
   display: flex;
+  align-items: center;
   justify-content: center;
-  margin-top: var(--space-7);
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+  padding-block: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.catalog__spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-brand);
+  border-radius: var(--radius-pill);
+  animation: catalog-spin 0.8s linear infinite;
+}
+
+@keyframes catalog-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catalog__spinner {
+    animation: none;
+    border-top-color: var(--color-border);
+  }
 }
 
 @media (max-width: 640px) {

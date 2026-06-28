@@ -17,7 +17,7 @@ const { modoSeguro } = storeToRefs(preferencias)
     :class="{ 'safe-toggle--off': !modoSeguro }"
     type="button"
     :aria-pressed="modoSeguro"
-    :title="modoSeguro ? 'Modo seguro activado · click para mostrar todo el catálogo' : 'Modo seguro desactivado · click para ocultar contenido explícito'"
+    :title="modoSeguro ? 'Modo seguro activado · oculta contenido +18' : 'Modo seguro desactivado · click para filtrar contenido +18'"
     @click="preferencias.alternarModoSeguro()"
   >
     <span class="u-visually-hidden">Modo seguro</span>

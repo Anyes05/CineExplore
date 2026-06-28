@@ -10,7 +10,12 @@
 const CLAVE_HOME = 'cineexplore:cache:home'
 const PREFIJO_DETALLE = 'cineexplore:cache:detalle:'
 const CLAVE_INDICE_DETALLES = 'cineexplore:cache:detalles-indice'
+const CLAVE_GENEROS = 'cineexplore:cache:generos'
 const MAX_DETALLES = 30
+const TTL_PAGINA_MS = 5 * 60 * 1000
+
+/** Cache en memoria de páginas del catálogo (solo sesión actual). */
+const paginasEnMemoria = new Map()
 
 function leer(clave) {
   try {
@@ -80,4 +85,54 @@ export function guardarCacheDetalle(id, datos) {
 export function leerCacheDetalle(id) {
   const entrada = leer(`${PREFIJO_DETALLE}${String(id)}`)
   return entrada?.datos ?? null
+}
+
+/* --------------------------- Géneros ------------------------------- */
+
+export function guardarCacheGeneros(generos) {
+  escribir(CLAVE_GENEROS, { ts: Date.now(), generos })
+}
+
+export function leerCacheGeneros() {
+  return leer(CLAVE_GENEROS)?.generos ?? null
+}
+
+/* ---------------------- Catálogo / paginación ---------------------- */
+
+/**
+ * Clave estable para identificar una página del catálogo según filtros activos.
+ */
+export function clavePaginaCatalogo({ consulta, generoId, orden, modoSeguro, pagina }) {
+  return JSON.stringify({ consulta, generoId, orden, modoSeguro, pagina })
+}
+
+/** Compara si el cache de Home corresponde a los filtros actuales. */
+export function filtrosCoinciden(cache, filtros) {
+  if (!cache) return false
+  return (
+    (cache.consulta ?? '') === (filtros.consulta ?? '') &&
+    (cache.generoId ?? null) === (filtros.generoId ?? null) &&
+    (cache.orden ?? 'popularity.desc') === (filtros.orden ?? 'popularity.desc') &&
+    Boolean(cache.modoSeguro) === Boolean(filtros.modoSeguro)
+  )
+}
+
+/** Guarda una respuesta paginada en memoria (TTL corto, misma sesión). */
+export function guardarCachePagina(clave, datos) {
+  paginasEnMemoria.set(clave, { ts: Date.now(), datos })
+}
+
+/** Lee una página cacheada en memoria si no expiró. */
+export function leerCachePagina(clave, maxEdad = TTL_PAGINA_MS) {
+  const entrada = paginasEnMemoria.get(clave)
+  if (!entrada || Date.now() - entrada.ts > maxEdad) {
+    paginasEnMemoria.delete(clave)
+    return null
+  }
+  return entrada.datos
+}
+
+/** Descarta páginas en memoria cuando cambian los filtros del catálogo. */
+export function limpiarCachePaginasCatalogo() {
+  paginasEnMemoria.clear()
 }

@@ -11,6 +11,8 @@ import { storeToRefs } from 'pinia'
 import { useListasStore } from '@/stores/listas'
 import { usePeliculasStore } from '@/stores/peliculas'
 import { useUiStore } from '@/stores/ui'
+import { useFiltroContenido } from '@/composables/useFiltroContenido'
+import { useAccionesPelicula } from '@/composables/useAccionesPelicula'
 import MovieGrid from '@/components/movie/MovieGrid.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import StateMessage from '@/components/ui/StateMessage.vue'
@@ -23,6 +25,8 @@ const router = useRouter()
 const listasStore = useListasStore()
 const peliculasStore = usePeliculasStore()
 const ui = useUiStore()
+const { filtrar } = useFiltroContenido()
+const { agregarALista } = useAccionesPelicula()
 const { mapaGeneros } = storeToRefs(peliculasStore)
 
 if (!Object.keys(mapaGeneros.value).length) {
@@ -75,6 +79,7 @@ function quitarDeLista(pelicula) {
 }
 
 const idsTodos = computed(() => (lista.value?.peliculas ?? []).map((p) => p.id))
+const peliculasVisibles = computed(() => filtrar(lista.value?.peliculas ?? []))
 </script>
 
 <template>
@@ -138,13 +143,13 @@ const idsTodos = computed(() => (lista.value?.peliculas ?? []).map((p) => p.id))
       </p>
 
       <MovieGrid
-        :peliculas="lista.peliculas"
+        :peliculas="peliculasVisibles"
         :mapa-generos="mapaGeneros"
         :ids-favoritos="idsTodos"
         titulo-vacio="Esta lista todavía está vacía"
         descripcion-vacio="Agregá películas desde el catálogo o desde el detalle de cada una."
         @alternar-favorito="quitarDeLista"
-        @agregar-a-lista="ui.abrirModalLista"
+        @agregar-a-lista="agregarALista"
       />
     </template>
   </section>
